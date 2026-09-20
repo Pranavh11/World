@@ -1,4 +1,11 @@
 {
+  "name": "ours-chat-root",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "npm --prefix ours-chat run build",
+    "start": "npm --prefix ours-chat start",
+    "dev": "npm --prefix ours-chat run dev"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.11.0",
