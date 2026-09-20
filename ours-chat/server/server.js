@@ -48,7 +48,7 @@ app.use('/api/notifications', require('./routes/notifications'));
 const clientDistPath = path.resolve(__dirname, '..', 'client', 'dist');
 if (process.env.NODE_ENV === 'production' || fs.existsSync(clientDistPath)) {
   app.use(express.static(clientDistPath));
-  app.get('*', (req, res, next) => {
+  app.get('/{*splat}', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     res.sendFile(path.join(clientDistPath, 'index.html'));
   });
