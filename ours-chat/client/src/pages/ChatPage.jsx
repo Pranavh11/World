@@ -1,0 +1,25 @@
+import { useEffect, useState } from 'react';
+import { io } from 'socket.io-client';
+import Sidebar from '../components/Sidebar';
+import ChatWindow from '../components/ChatWindow';
+import ProfilePanel from '../components/ProfilePanel';
+import { useAuth } from '../context/AuthContext';
+import { API_URL, api } from '../services/api';
+
+export default function ChatPage() { const { user } = useAuth(); const [conversations, setConversations] = useState([]); const [selected, setSelected] = useState(null); const [profile, setProfile] = useState(null); const [socket, setSocket] = useState(null); const [notifications, setNotifications] = useState(0); const [loading, setLoading] = useState(true);
+  useEffect(() => { Promise.all([api('/conversations'), api('/notifications')]).then(([conversationData, notificationData]) => { setConversations(conversationData.conversations); setSelected(conversationData.conversations[0] || null); setNotifications(notificationData.unread); }).catch(() => {}).finally(() => setLoading(false)); const nextSocket = io(API_URL.replace('/api', ''), { auth: { token: localStorage.getItem('ours_token') } }); nextSocket.on('notification', ({ conversationId }) => { if (String(conversationId) !== String(selected?._id)) setNotifications((count) => count + 1); }); nextSocket.on('receive-message', (message) => setConversations((items) => items.map((conversation) => String(conversation._id) === String(message.conversationId) ? { ...conversation, lastMessage: message, updatedAt: message.createdAt } : conversation).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)))); nextSocket.on('user-online', ({ userId }) => setConversations((items) => items.map((conversation) => ({ ...conversation, members: conversation.members.map((member) => String(member._id) === String(userId) ? { ...member, isOnline: true } : member) })))); nextSocket.on('user-offline', ({ userId }) => setConversations((items) => items.map((conversation) => ({ ...conversation, members: conversation.members.map((member) => String(member._id) === String(userId) ? { ...member, isOnline: false, lastSeen: new Date().toISOString() } : member) })))); setSocket(nextSocket); return () => nextSocket.disconnect(); }, []);
+  async function newConversation() { const username = window.prompt('Enter your friend\'s username'); if (!username) return; try { const { users } = await api(`/users/search?q=${encodeURIComponent(username)}`); const friend = users.find((person) => person.username === username.toLowerCase()) || users[0]; if (!friend) return alert('No friend found.'); const { conversation } = await api('/conversations', { method: 'POST', body: JSON.stringify({ memberId: friend._id }) }); setConversations((current) => current.some((item) => item._id === conversation._id) ? current : [conversation, ...current]); setSelected(conversation); } catch { alert('Something went wrong. Try again.'); } }
+  async function newGroup() { const name = window.prompt('Name your group'); const names = window.prompt('Friend usernames, separated by commas'); if (!name || !names) return; const members = []; for (const username of names.split(',').map((item) => item.trim()).filter(Boolean)) { const { users } = await api(`/users/search?q=${encodeURIComponent(username)}`); if (users[0]) members.push(users[0]._id); } if (!members.length) return alert('No friends found.'); const { conversation } = await api('/conversations', { method: 'POST', body: JSON.stringify({ name, memberIds: members }) }); setConversations((current) => [conversation, ...current]); setSelected(conversation); }
+  async function markNotificationsRead() { if (!notifications) return; await api('/notifications/read', { method: 'PATCH' }); setNotifications(0); }
+  if (loading || !socket) return <div className="loading-screen"><div className="brand-mark">o</div><p>Making room for you...</p></div>;
+  return <main className="app-shell">
+    <Sidebar conversations={conversations} selectedId={selected?._id} onSelect={(conversation) => { setSelected(conversation); markNotificationsRead(); }} onNew={newConversation} onNewGroup={newGroup} onProfile={() => setProfile(user)} onNotifications={markNotificationsRead} notifications={notifications} />
+    <div className="chat-area">
+      {selected ? <ChatWindow conversation={selected} user={user} socket={socket} onBack={() => setSelected(null)} onProfile={() => {
+        const person = selected.isGroup ? null : selected.members.find((member) => String(member._id) !== String(user.id));
+        setProfile(person);
+      }} /> : <div className="blank-chat"><div className="brand-mark">o</div><h2>Your little corner of the internet is waiting.</h2><p>Choose a room and start something worth remembering.</p></div>}
+      {profile && <ProfilePanel person={profile} conversation={selected?.isGroup ? selected : null} own={!selected?.isGroup && (profile.id === user.id || profile._id === user.id)} close={() => setProfile(null)} onConversation={(conversation) => { setSelected(conversation); setConversations((items) => items.map((item) => item._id === conversation._id ? conversation : item)); }} />}
+    </div>
+  </main>;
+}
