@@ -21,6 +21,9 @@ async function connectDatabase() {
       return;
     } catch (error) {
       console.error('Production MongoDB connection failed:', error.message);
+      if (error.message && (error.message.toLowerCase().includes('bad auth') || error.message.toLowerCase().includes('authentication failed'))) {
+        console.error('HINT: MongoDB Atlas Authentication failed. Please check your username and password in MONGODB_URI / MONGO_URI in Render settings. If your password contains special characters (@, :, /, #), ensure they are URL-encoded (e.g. @ becomes %40).');
+      }
       throw error;
     }
   }
